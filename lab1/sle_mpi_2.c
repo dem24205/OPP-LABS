@@ -3,7 +3,9 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include "init_sys_2.h"
+
 #define EPSILON 1e-10
+
 void distribute_data(FullSystem* full_system, LocalData* local, int N, MPI_Comm comm) {
     int rank = local->rank;
     //u - вектор, инициализированный на нулевом процессе
@@ -32,30 +34,32 @@ void distribute_data(FullSystem* full_system, LocalData* local, int N, MPI_Comm 
         }
     }
 }
-//Распределенное умножение
-//Распределенное умножение через Sendrecv
+
 void matvec_distributed(LocalData* local,
                         double* local_x,
                         double* local_result,
                         int N) {
     int rank = local->rank;
     int size = local->size;
-   
-    // Сохраняем исходный x
-    double* current_x = malloc(local->local_rows * sizeof(double));
+
+    //находим максимальный размер куска
+    int max_rows = local->local_rows;
+    MPI_Allreduce(&local->local_rows, &max_rows, 1, MPI_INT, MPI_MAX, MPI_COMM_WORLD);
+
+    //буферы под максимальный размер
+    double* current_x = calloc(max_rows, sizeof(double)); //остаются нулями 
     if (!current_x) MPI_Abort(MPI_COMM_WORLD, 1);
-   
-    for (int j = 0; j < local->local_rows; j++) {
-        current_x[j] = local_x[j];
-    }
-   
-    double* temp_x = malloc(local->local_rows * sizeof(double));
+    double* temp_x = calloc(max_rows, sizeof(double));
     if (!temp_x) {
         free(current_x);
         MPI_Abort(MPI_COMM_WORLD, 1);
     }
-   
-    // Умножаем на свой x
+
+    for (int j = 0; j < local->local_rows; j++) {
+        current_x[j] = local_x[j];
+    }
+
+    //свой вклад
     for (int i = 0; i < local->local_rows; i++) {
         local_result[i] = 0.0;
         for (int j = 0; j < local->local_rows; j++) {
@@ -63,37 +67,35 @@ void matvec_distributed(LocalData* local,
             local_result[i] += local->local_A[i * N + global_j] * current_x[j];
         }
     }
-   
-    // Кольцевая передача через Sendrecv (безопасно для любого числа процессов)
+
+    //кольцо
     for (int step = 1; step < size; step++) {
-        int dest = (rank + 1) % size; // кому отправляем
-        int comm_src = (rank - 1 + size) % size; // от кого получаем (для коммуникации)
-       
-        // Sendrecv = одновременно отправляет И получает (нет дедлока!)
-        MPI_Sendrecv(current_x, local->local_rows, MPI_DOUBLE, dest, 0,
-                     temp_x, local->local_rows, MPI_DOUBLE, comm_src, 0,
+        int dest = (rank + 1) % size;
+        int comm_src = (rank - 1 + size) % size;
+        MPI_Sendrecv(current_x, max_rows, MPI_DOUBLE, dest,     17,
+                     temp_x,    max_rows, MPI_DOUBLE, comm_src, 17,
                      MPI_COMM_WORLD, MPI_STATUS_IGNORE);
-       
-        // Вычисляем логический источник (чей x мы получили на этом шаге)
+
+        //чей кусок мы получили
         int current_src = (rank - step + size) % size;
-       
-        // Умножаем полученный x
+        //сколько реально значимых элементов пришло
+        int src_count = local->send_counts[current_src];
+
         for (int i = 0; i < local->local_rows; i++) {
-            for (int j = 0; j < local->local_rows; j++) {
+            for (int j = 0; j < src_count; j++) {
                 int global_j = local->displacements[current_src] + j;
                 local_result[i] += local->local_A[i * N + global_j] * temp_x[j];
             }
         }
-       
-        // Обновляем current_x для следующего шага
-        for (int j = 0; j < local->local_rows; j++) {
+
+        for (int j = 0; j < max_rows; j++) {
             current_x[j] = temp_x[j];
         }
     }
-   
     free(temp_x);
     free(current_x);
 }
+
 //каждый процесс вычисляет свою часть суммы
 //MPI_Allreduce собирает все частичные суммы и возвращает результат их суммирования для каждого процесса
 double dot_product_local(LocalData* local, double* v1, double* v2) {
@@ -106,6 +108,7 @@ double dot_product_local(LocalData* local, double* v1, double* v2) {
         MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
     return global_sum;
 }
+
 //время выполнения
 //количество итераций
 void conjugate_gradients(LocalData* local, int N, int max_iterations) {
@@ -163,8 +166,8 @@ void conjugate_gradients(LocalData* local, int N, int max_iterations) {
        
         if (r_norm < stop_criterion) {
             if (rank == 0) {
-                printf("Converged after %d iterations, residual norm = %e\n",
-                       iteration+1, r_norm);
+                printf("Converged after %d iterations\n",
+                       iteration+1);
             }
             break;
         }
@@ -179,7 +182,6 @@ void conjugate_gradients(LocalData* local, int N, int max_iterations) {
         }
         iteration++;
     } while (iteration < max_iterations);
-   
     free(local_r);
     free(local_z);
     free(local_Az);

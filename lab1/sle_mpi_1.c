@@ -85,7 +85,7 @@ void conjugate_gradients(LocalData* local, int N, int max_iterations) {
         r[i] = local->full_b[i] - full_part[i];
     }
     
-    //z0 = r0 (отдельно, для ясности)
+    //z0 = r0
     for (int i = 0; i < N; i++) {
         z[i] = r[i];
     }
@@ -121,8 +121,8 @@ void conjugate_gradients(LocalData* local, int N, int max_iterations) {
         
         if (r_norm < stop_criterion) {
             if (rank == 0) {
-                printf("Converged after %d iterations, residual = %e\n", 
-                       iteration + 1, r_norm);
+                printf("Converged after %d iterations\n", 
+                       iteration + 1);
             }
             break;
         }
