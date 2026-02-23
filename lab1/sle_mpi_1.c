@@ -173,10 +173,6 @@ int main(int argc, char** argv) {
             printf("Process 0: failed to create full system\n");
             MPI_Abort(MPI_COMM_WORLD, 1);
         }
-        full_A(system->A, N);
-        full_x0(system->x0, N);
-        full_u(system->u, N);
-        full_b(system->b, system->u, system->A, system->N);
     }
     
     LocalData* local = create_local_data(rank, size, N);

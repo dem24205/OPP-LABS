@@ -1,6 +1,35 @@
 #include <math.h>
 #include "init_sys_1.h"
 
+void fill_x0(double* x0, int N) {
+    for (int i = 0; i < N; ++i) {
+        x0[i] = 0.0;
+    }
+}
+
+static void fill_u(double* u, int N) {
+    for (int i = 0; i < N; ++i) {
+        u[i] = sin(2 * M_PI * i / N);
+    }
+}
+
+static void fill_b(double* b, const double* u, const double* A, int N) {
+    for (int i = 0; i < N; ++i) {
+        b[i] = 0.0;
+        for (int j = 0; j < N; ++j) {
+            b[i] += A[i * N + j] * u[j];
+        }
+    }
+}
+
+void fill_A(double* A, int N) {
+    for (int i = 0; i < N; ++i) {
+        for (int j = 0; j < N; ++j) {
+            A[i*N + j] = 1.0 / (i + j + 1.0);
+        }
+    }
+}
+
 FullSystem* create_full_system(int N) {
     FullSystem* system = (FullSystem*)malloc(sizeof(FullSystem));
     if (!system) return NULL;
@@ -36,6 +65,10 @@ FullSystem* create_full_system(int N) {
         return NULL;
     }
     
+    fill_A(system->A, N);
+    fill_x0(system->x0, N);
+    fill_u(system->u, N);
+    fill_b(system->b, system->u, system->A, N);
     return system;
 }
 
@@ -159,32 +192,5 @@ void free_local_data(LocalData* local) {
     free(local);
 }
 
-void full_A(double* A, int N) {
-    for (int i = 0; i < N; ++i) {
-        for (int j = 0; j < N; ++j) {
-            A[i*N + j] = 1.0 / (i + j + 1.0);
-        }
-    }
-}
 
-void full_x0(double* x0, int N) {
-    for (int i = 0; i < N; ++i) {
-        x0[i] = 0.0;
-    }
-}
-
-void full_u(double* u, int N) {
-    for (int i = 0; i < N; ++i) {
-        u[i] = sin(2 * M_PI * i / N);
-    }
-}
-
-void full_b(double* b, const double* u, const double* A, int N) {
-    for (int i = 0; i < N; ++i) {
-        b[i] = 0.0;
-        for (int j = 0; j < N; ++j) {
-            b[i] += A[i * N + j] * u[j];
-        }
-    }
-}
 

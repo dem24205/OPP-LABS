@@ -32,10 +32,4 @@ void free_full_system(FullSystem* system);
 
 LocalData* create_local_data(int rank, int size, int N);
 void free_local_data(LocalData* local);
-
-void full_A(double* A, int N);
-void full_x0(double* x0, int N);
-void full_u(double* u, int N);
-void full_b(double* b, const double* u, const double* A, int N);
-
 #endif
