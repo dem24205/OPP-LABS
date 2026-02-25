@@ -192,6 +192,7 @@ double calculate_error(double* solution, double* exact, int N) {
     }
     return error;
 }
+
 int main(int argc, char** argv) {
     MPI_Init(&argc, &argv);
     int rank, size;
