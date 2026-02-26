@@ -5,6 +5,7 @@
 #include "structures2.h"
 
 #define EPSILON 1e-10
+#define MPI_TAG 17
 
 void distribute_data(FullSystem* full_system, LocalData* local, int N, MPI_Comm comm) {
     int rank = local->rank;
@@ -68,8 +69,8 @@ void matvec_distributed(LocalData* local,
     for (int step = 1; step < size; step++) {
         int dest = (rank + 1) % size;
         int comm_src = (rank - 1 + size) % size;
-        MPI_Sendrecv(current_x, max_rows, MPI_DOUBLE, dest,     17,
-                     temp_x,    max_rows, MPI_DOUBLE, comm_src, 17,
+        MPI_Sendrecv(current_x, max_rows, MPI_DOUBLE, dest,     MPI_TAG,
+                     temp_x,    max_rows, MPI_DOUBLE, comm_src, MPI_TAG,
                      MPI_COMM_WORLD, MPI_STATUS_IGNORE);
 
         //чей кусок мы получили
