@@ -1,0 +1,160 @@
+#include <math.h>
+#include "structures2.h"
+
+static void fill_A(double* A, int N) {
+    for (int i = 0; i < N; ++i) {
+        for (int j = 0; j < N; ++j) {
+            A[i*N + j] = 1.0 / (i + j + 1.0);
+        }
+    }
+}
+
+static void fill_x0(double* x0, int N) {
+    for (int i = 0; i < N; ++i) {
+        x0[i] = 0.0;
+    }
+}
+
+static void fill_u(double* u, int N) {
+    for (int i = 0; i < N; ++i) {
+        u[i] = sin(2 * M_PI * i / N);
+    }
+} 
+
+FullSystem* create_full_system(int N) {
+    FullSystem* system = (FullSystem*)malloc(sizeof(FullSystem));
+    if (!system) return NULL;
+    system->N = N;
+    system->A = (double*)malloc(N * N * sizeof(double));
+    if (!system->A) {
+        free(system);
+        return NULL;
+    }
+    system->x0 = (double*)malloc(N * sizeof(double));
+    if (!system->x0) {
+        free(system->A);
+        free(system);
+        return NULL;
+    }
+    system->u = (double*)malloc(N * sizeof(double));
+    if (!system->u) {
+        free(system->A);
+        free(system->x0);
+        free(system);
+        return NULL;
+    }
+    fill_A(system->A, N);
+    fill_u(system->u, N);
+    fill_x0(system->x0, N);
+    return system;
+}
+
+void free_full_system(FullSystem* system) {
+    if (!system) return;
+    free(system->A);
+    free(system->x0);
+    free(system->u);
+    free(system);
+}
+
+LocalData* create_local_data(int rank, int size, int N) {
+    LocalData* local = (LocalData*)malloc(sizeof(LocalData));
+    if (!local) return NULL;
+
+    local->rank = rank;
+    local->size = size;
+    int base_rows = N / size;
+    int remainder = N % size;
+    local->local_rows = base_rows + (rank < remainder ? 1 : 0);
+    local->max_rows = (N + size - 1) / size;
+
+    local->send_counts = (int*)malloc(size * sizeof(int));
+    if (!local->send_counts) {
+        free(local);
+        return NULL;
+    }
+    local->displacements = (int*)malloc(size * sizeof(int));
+    if (!local->displacements) {
+        free(local->send_counts);
+        free(local);
+        return NULL;
+    }
+    local->matrix_counts = (int*)malloc(size * sizeof(int));
+    if (!local->matrix_counts) {
+        free(local->displacements);
+        free(local->send_counts);
+        free(local);
+        return NULL;
+    }
+    local->matrix_displs = (int*)malloc(size * sizeof(int));
+    if (!local->matrix_displs) {
+        free(local->matrix_counts);
+        free(local->displacements);
+        free(local->send_counts);
+        free(local);
+        return NULL;
+    }
+    
+    int offset = 0;
+    for (int i = 0; i < size; i++) {
+        int rows = base_rows + (i < remainder ? 1 : 0);
+        local->send_counts[i] = rows;
+        local->displacements[i] = offset;
+        local->matrix_counts[i] = rows * N;
+        local->matrix_displs[i] = offset * N;
+        offset += rows;
+    }
+    
+    local->local_A = (double*)malloc(local->local_rows * N * sizeof(double));
+    if (!local->local_A) {
+        free(local->matrix_counts);
+        free(local->displacements);
+        free(local->send_counts);
+        free(local);
+        return NULL;
+    }
+    local->local_x = (double*)malloc(local->local_rows * sizeof(double));
+    if (!local->local_x) {
+        free(local->local_A);
+        free(local->matrix_counts);
+        free(local->displacements);
+        free(local->send_counts);
+        free(local);
+        return NULL;
+    }
+    local->local_b = (double*)malloc(local->local_rows * sizeof(double));
+    if (!local->local_b) {
+        free(local->local_x);
+        free(local->local_A);
+        free(local->matrix_counts);
+        free(local->displacements);
+        free(local->send_counts);
+        free(local);
+        return NULL;
+    }
+    local->full_u = (double*)malloc(N * sizeof(double));
+    if (!local->full_u) {
+        free(local->local_b);
+        free(local->local_x);
+        free(local->local_A);
+        free(local->matrix_counts);
+        free(local->displacements);
+        free(local->send_counts);
+        free(local);
+        return NULL;
+    }
+    return local;
+}
+
+void free_local_data(LocalData* local) {
+    if (!local) return;
+    free(local->send_counts);
+    free(local->displacements);
+    free(local->matrix_counts);
+    free(local->matrix_displs);
+    free(local->local_A);
+    free(local->local_x);
+    free(local->local_b);
+    free(local->full_u);
+    free(local);
+}
