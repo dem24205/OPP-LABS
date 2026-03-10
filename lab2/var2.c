@@ -16,19 +16,39 @@ double calculate_error(double* solution, double* exact, int N) {
 }
 
 void conjugate_gradients_omp_v2(FullSystem* system, int N, int max_iterations) {
-    double* r = malloc(N * sizeof(double));
-    double* z = malloc(N * sizeof(double));
-    double* full_part = malloc(N * sizeof(double));
+    double* r = (double*)malloc(N * sizeof(double));
+    if (!r) {
+        printf("Failed to allocate memory for r\n");
+        return;
+    }
+    
+    double* z = (double*)malloc(N * sizeof(double));
+    if (!z) {
+        printf("Failed to allocate memory for z\n");
+        free(r);
+        return;
+    }
+    
+    double* full_part = (double*)malloc(N * sizeof(double));
+    if (!full_part) {
+        printf("Failed to allocate memory for full_part\n");
+        free(r);
+        free(z);
+        return;
+    }
     
     double stop_criterion;
     int converged = 0;
     int iteration = 0;
-    double r_norm;
-    double r_dot_r, Az_dot_z, alpha, beta;
-    
-    // Эти переменные выносим ДО parallel
+    double r_norm = 0.0;
+    double r_dot_r = 0.0;
+    double Az_dot_z = 0.0;
+    double alpha = 0.0;
+    double beta = 0.0;
     double local_b_norm = 0.0;
-    double local_r_dot_r, local_Az_dot_z, local_r_norm_sq;
+    double local_r_dot_r = 0.0;
+    double local_Az_dot_z = 0.0;
+    double local_r_norm_sq = 0.0;
     
     #pragma omp parallel
     {
@@ -143,22 +163,18 @@ void conjugate_gradients_omp_v2(FullSystem* system, int N, int max_iterations) {
 int main(int argc, char** argv) {
     const int N = 10000;
     const int max_iterations = 1000;
-    
     FullSystem* system = create_full_system(N);
     if (!system) {
         printf("Failed to create system");
         return 1;
     }
-    
     double start_time, end_time;
     start_time = omp_get_wtime();
     conjugate_gradients_omp_v2(system, N, max_iterations);
-    end_time = omp_get_wtime();
-    
+    end_time = omp_get_wtime();   
     double error = calculate_error(system->x0, system->u, N);
     printf("Time: %f seconds\n", end_time - start_time);
     printf("Error: %e\n", error);
-    
     free_full_system(system);
     return 0;
-}
+} 
