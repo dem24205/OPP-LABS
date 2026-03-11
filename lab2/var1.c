@@ -4,7 +4,8 @@
 #include <stdlib.h>
 #include "utils.h"
 
-#define EPSILON 1e-12
+#define EPSILON 1e-10
+#define ITERATION_MAX_NUM 1000
 
 double calculate_error(double* solution, double* exact, int N) {
     double error = 0.0;
@@ -15,7 +16,7 @@ double calculate_error(double* solution, double* exact, int N) {
     return error;
 }
 
-void conjugate_gradients(FullSystem* system, int N, int max_iterations) {
+void conjugate_gradients(FullSystem* system, int N) {
     double* r = malloc(N * sizeof(double));
     if (!r) {
         printf("Failed to allocate r vector\n");
@@ -123,7 +124,7 @@ void conjugate_gradients(FullSystem* system, int N, int max_iterations) {
         }
         
         iteration++;
-    } while (iteration < max_iterations);
+    } while (iteration < ITERATION_MAX_NUM);
     
     free(r);
     free(z);
@@ -132,7 +133,6 @@ void conjugate_gradients(FullSystem* system, int N, int max_iterations) {
 
 int main(int argc, char** argv) {
     const int N = 10000;
-    const int max_iterations = 1000;
     FullSystem* system = create_full_system(N);
     if (!system) {
         printf("Failed to create system");
@@ -140,7 +140,7 @@ int main(int argc, char** argv) {
     }   
     double start_time, end_time;
     start_time = omp_get_wtime(); 
-    conjugate_gradients(system, N, max_iterations);
+    conjugate_gradients(system, N);
     end_time = omp_get_wtime();
     double error = calculate_error(system->x0, system->u, N);
     printf("Time: %f seconds\n", end_time - start_time);

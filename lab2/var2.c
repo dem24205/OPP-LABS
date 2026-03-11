@@ -4,7 +4,8 @@
 #include <stdlib.h>
 #include "utils.h"
 
-#define EPSILON 1e-12
+#define EPSILON 1e-10
+#define ITERATION_MAX_NUM 1000
 
 double calculate_error(double* solution, double* exact, int N) {
     double error = 0.0;
@@ -15,20 +16,20 @@ double calculate_error(double* solution, double* exact, int N) {
     return error;
 }
 
-void conjugate_gradients_omp_v2(FullSystem* system, int N, int max_iterations) {
+void conjugate_gradients(FullSystem* system, int N) {
     double* r = (double*)malloc(N * sizeof(double));
     if (!r) {
         printf("Failed to allocate memory for r\n");
         return;
     }
-    
+
     double* z = (double*)malloc(N * sizeof(double));
     if (!z) {
         printf("Failed to allocate memory for z\n");
         free(r);
         return;
     }
-    
+
     double* full_part = (double*)malloc(N * sizeof(double));
     if (!full_part) {
         printf("Failed to allocate memory for full_part\n");
@@ -36,7 +37,7 @@ void conjugate_gradients_omp_v2(FullSystem* system, int N, int max_iterations) {
         free(z);
         return;
     }
-    
+
     double stop_criterion;
     int converged = 0;
     int iteration = 0;
@@ -45,13 +46,9 @@ void conjugate_gradients_omp_v2(FullSystem* system, int N, int max_iterations) {
     double Az_dot_z = 0.0;
     double alpha = 0.0;
     double beta = 0.0;
-    double local_b_norm = 0.0;
-    double local_r_dot_r = 0.0;
-    double local_Az_dot_z = 0.0;
-    double local_r_norm_sq = 0.0;
-    
+
     #pragma omp parallel
-    {
+    { 
         // Ax0
         #pragma omp for
         for (int i = 0; i < N; i++) {
@@ -66,25 +63,24 @@ void conjugate_gradients_omp_v2(FullSystem* system, int N, int max_iterations) {
         for (int i = 0; i < N; i++) {
             r[i] = system->b[i] - full_part[i];
         }
-        
+
         // z0 = r0
         #pragma omp for
         for (int i = 0; i < N; i++) {
             z[i] = r[i];
         }
-        
-        local_b_norm = 0.0;
-        #pragma omp for reduction(+:local_b_norm)
+
+        #pragma omp for reduction(+:r_dot_r)
         for (int i = 0; i < N; i++) {
-            local_b_norm += system->b[i] * system->b[i];
+            r_dot_r += system->b[i] * system->b[i];
         }
-        
+
         #pragma omp single
         {
-            double b_norm = sqrt(local_b_norm);
-            stop_criterion = EPSILON * b_norm;
+            stop_criterion = EPSILON * sqrt(r_dot_r);
+            r_dot_r = 0.0;
         }
-        
+
         do {
             // Az
             #pragma omp for
@@ -95,66 +91,60 @@ void conjugate_gradients_omp_v2(FullSystem* system, int N, int max_iterations) {
                 }
             }
 
-            local_r_dot_r = 0.0;
-            local_Az_dot_z = 0.0;
-            
-            #pragma omp for reduction(+:local_r_dot_r, local_Az_dot_z)
+            #pragma omp for reduction(+:r_dot_r, Az_dot_z)
             for (int i = 0; i < N; i++) {
-                local_r_dot_r += r[i] * r[i];
-                local_Az_dot_z += full_part[i] * z[i];
+                r_dot_r += r[i] * r[i];
+                Az_dot_z += full_part[i] * z[i];
             }
-            
+
             #pragma omp single
             {
-                r_dot_r = local_r_dot_r;
-                Az_dot_z = local_Az_dot_z;
                 alpha = r_dot_r / Az_dot_z;
             }
-            
+
             // x = x + alpha * z
             #pragma omp for
             for (int i = 0; i < N; i++) {
                 system->x0[i] += alpha * z[i];
             }
-            
+
             // r = r - alpha * A*z
             #pragma omp for
             for (int i = 0; i < N; i++) {
                 r[i] -= alpha * full_part[i];
             }
-            
-            local_r_norm_sq = 0.0;
-            #pragma omp for reduction(+:local_r_norm_sq)
+
+            #pragma omp for reduction(+:r_norm)
             for (int i = 0; i < N; i++) {
-                local_r_norm_sq += r[i] * r[i];
+                r_norm += r[i] * r[i];
             }
-            
+
             #pragma omp single
             {
-                r_norm = sqrt(local_r_norm_sq);
-                
+                r_norm = sqrt(r_norm);
+
                 if (r_norm < stop_criterion) {
                     converged = 1;
-                    printf("Iterations %d\n", iteration + 1);
                 }
-                
+
                 beta = (r_norm * r_norm) / r_dot_r;
+                r_dot_r = 0.0;
+                Az_dot_z = 0.0;
+                r_norm = 0.0;
+                iteration++;
             }
-            
+
+            if (converged) break;
+
             // z = r + beta * z
             #pragma omp for
             for (int i = 0; i < N; i++) {
                 z[i] = r[i] + beta * z[i];
             }
-            
-            #pragma omp single
-            {
-                iteration++;
-            }
-            
-        } while (iteration < max_iterations && !converged);
+
+        } while (iteration < ITERATION_MAX_NUM);
     }
-    
+
     free(r);
     free(z);
     free(full_part);
@@ -162,7 +152,6 @@ void conjugate_gradients_omp_v2(FullSystem* system, int N, int max_iterations) {
 
 int main(int argc, char** argv) {
     const int N = 10000;
-    const int max_iterations = 1000;
     FullSystem* system = create_full_system(N);
     if (!system) {
         printf("Failed to create system");
@@ -170,7 +159,7 @@ int main(int argc, char** argv) {
     }
     double start_time, end_time;
     start_time = omp_get_wtime();
-    conjugate_gradients_omp_v2(system, N, max_iterations);
+    conjugate_gradients(system, N);
     end_time = omp_get_wtime();   
     double error = calculate_error(system->x0, system->u, N);
     printf("Time: %f seconds\n", end_time - start_time);
