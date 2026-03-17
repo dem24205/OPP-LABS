@@ -4,7 +4,7 @@
 #include <stdlib.h>
 #include "utils.h"
 
-#define EPSILON 1e-10
+#define EPSILON 1e-12
 #define ITERATION_MAX_NUM 1000
 
 double calculate_error(double* solution, double* exact, int N) {
@@ -64,11 +64,10 @@ void conjugate_gradients(FullSystem* system, int N) {
     for (int i = 0; i < N; i++) {
         b_norm += system->b[i] * system->b[i];
     }
-    b_norm = sqrt(b_norm);
     
-    double stop_criterion = EPSILON * b_norm;
+    double stop_criterion = EPSILON * sqrt(b_norm);;
     int iteration = 0;
-    double r_norm;
+    double r_norm = 0.0;
     
     do {
         //Az
@@ -102,21 +101,18 @@ void conjugate_gradients(FullSystem* system, int N) {
             r[i] -= alpha * full_part[i];
         }
         
-        double r_norm_sq = 0.0;
-        #pragma omp parallel for reduction(+:r_norm_sq)
+        #pragma omp parallel for reduction(+:r_norm)
         for (int i = 0; i < N; i++) {
-            r_norm_sq += r[i] * r[i];
+            r_norm += r[i] * r[i];
         }
-        r_norm = sqrt(r_norm_sq);
+        r_norm = sqrt(r_norm);
         
-        if (r_norm < stop_criterion) {
-            printf("Iterations %d\n", iteration + 1);
-            break;
-        }
+        if (r_norm < stop_criterion) break;
         
         //beta = (r_new, r_new) / (r_old, r_old)
         double beta = (r_norm * r_norm) / r_dot_r;
-        
+        r_norm = 0.0;
+
         //z = r + beta * z
         #pragma omp parallel for
         for (int i = 0; i < N; i++) {
