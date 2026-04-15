@@ -163,7 +163,7 @@ int main(int argc, char **argv) {
         if (rank == 0) printf("Result: ERROR\n");
         MPI_Abort(MPI_COMM_WORLD, 1);
     }
-    
+    double start = MPI_Wtime();
     if (coords[1] == 0) {
         MPI_Scatter(A, rows * n2, MPI_DOUBLE, Ablock,
                     rows * n2, MPI_DOUBLE, 0, col_comm);
@@ -174,7 +174,7 @@ int main(int argc, char **argv) {
                     n2 * cols, MPI_DOUBLE, 0, row_comm);
     }
     MPI_Bcast(Bblock, n2 * cols, MPI_DOUBLE, 0, col_comm);
-    double start = MPI_Wtime();
+    
     for (int i = 0; i < rows; i++) {
         for (int k = 0; k < n2; k++) {
             for (int j = 0; j < cols; j++) {
