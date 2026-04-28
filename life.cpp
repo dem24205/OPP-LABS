@@ -176,7 +176,6 @@ int main(int argc, char* argv[]) {
     int base_rows = X / size;
     int extra = X % size;
     int local_rows = base_rows + (rank < extra ? 1 : 0);
-    int start_row = rank * base_rows + min(rank, extra);
     
     int dop_rows = local_rows + 2;
     char* local_grid = new char[dop_rows * Y]();
@@ -230,14 +229,14 @@ int main(int argc, char* argv[]) {
     double end_time = MPI_Wtime();
     
     if (rank == 0) {
-        if (stop){
-            cout << "Остановка на итерации " << iter << " (повтор состояния)\n";
-        }
-        else{
-            cout << "Достигнут лимит итераций (" << max_iter << ")\n";
-        }
-        cout << "Время выполнения: " << end_time - start_time << " секунд" << endl;
+    if (stop) {
+        cout << "Simulation stopped at iteration " << iter << endl;
+    } 
+    else {
+        cout << "Maximum iterations limit reached: " << max_iter << endl;
     }
+    cout << "Execution time: " << end_time - start_time << " seconds" << endl;
+}
     
     for (int i = 0; i < history_count; ++i){
         delete[] history[i];
